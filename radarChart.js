@@ -146,7 +146,7 @@ function radarChart(selector, data, options) {
     .data(allAxis)
     .enter()
     .append('g')
-    .attr('class', '.axis');
+    .attr('class', 'axis');
 
   // Append the lines to the groups
   axis.append('line')
