@@ -1,6 +1,6 @@
 // Chart size
 var margin = {top: 100, right: 100, bottom: 100, left: 100};
-var width = Math.min(700, window.innerWidth - 10) - margin.left - margin.right;
+var width = Math.min(1000, window.innerWidth - 10) - margin.left - margin.right;
 var height = Math.min(width, window.innerHeight - margin.top - margin.bottom);
 
 // Colors
@@ -11,11 +11,11 @@ var radarChartOptions = {
   width: width,
   height: height,
   margin: margin,
-  maxValue: 0.3,
+  maxValue: 0.2,
   levels: 6,
   roundStrokes: true,
   color: color,
-  glow: false
+  glow: true
 };
 
 // Call Radar Chart function

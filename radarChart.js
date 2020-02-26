@@ -14,7 +14,7 @@ function radarChart(selector, data, options) {
     levels: 3, //How many levels of inner circles should be drawn
     maxValue: 1, //Value that the biggest circle will represent
     labelFactor: 1.25, //How much further for the outer circle the labels should be positioned
-    wrapWidth: 60, //The number of pixels after which a label needs to be given a new line
+    wrapWidth: 150, //The number of pixels after which a label needs to be given a new line
     opacityArea: 0.35, //Opacity of the area of the blob
     dotRadius: 4, //Size of the circles representing each value
     opacityCircles: 0.1, //Opacity of the circles representing each value
@@ -34,13 +34,12 @@ function radarChart(selector, data, options) {
   }
   
   // If the supplied maxValue is smaller than the max in the data, replace by the max in the data
-  /* To refactor - not working properly */
-  // var maxValue = Math.max(cfg.maxValue, d3.max(data, function(i) {
-  //   return d3.max(i.map(function(o) {
-  //     return o.value;
-  //   }))
-  // }));
-  maxValue = cfg.maxValue;
+  var maxInData = d3.max(data, function(i) {
+    return d3.max(i.map(function(o) {
+      return o.value;
+    }))
+  })
+  maxValue = Math.max(cfg.maxValue, Math.ceil(maxInData * 10) / 10);
   
   // Base variables
   var allAxis = (data[0].map(function(i, j) { //Get the label of each axis
@@ -83,18 +82,16 @@ function radarChart(selector, data, options) {
   /////////////////////////////////////////////////////////
   
   // Filter for the outside glow
-  if (cfg.glow) {
-    var filter = g.append('defs').append('filter')
-      .attr('class', 'glow');
-    var feGaussianBlur = filter.append('feGaussianBlur')
-      .attr('stdDeviation', '2.5')
-      .attr('result', 'coloredBlur');
-    var feMerge = filter.append('feMerge');
-    var feMergeNode_1 = feMerge.append('feMergeNode')
-      .attr('in', 'coloredBlur');
-    var feMergeNode_2 = feMerge.append('feMergeNode')
-      .attr('in', 'SourceGraphic');
-  }
+  var filter = g.append('defs').append('filter')
+    .attr('id', 'glow');
+  var feGaussianBlur = filter.append('feGaussianBlur')
+    .attr('stdDeviation', '2.5')
+    .attr('result', 'coloredBlur');
+  var feMerge = filter.append('feMerge');
+  var feMergeNode_1 = feMerge.append('feMergeNode')
+    .attr('in', 'coloredBlur');
+  var feMergeNode_2 = feMerge.append('feMergeNode')
+    .attr('in', 'SourceGraphic');
 
 
   /////////////////////////////////////////////////////////
@@ -116,7 +113,6 @@ function radarChart(selector, data, options) {
     .style('fill', '#CDCDCD')
     .style('stroke', '#CDCDCD')
     .style('fill-opacity', cfg.opacityCircles)
-    /* To refactor, glow not working in chrome */
     .style('filter', function() {
       if (cfg.glow) {
         return 'url(#glow)';
@@ -167,6 +163,213 @@ function radarChart(selector, data, options) {
     .style('stroke-width', '2px');
   
   // Add labels to the axis
+  axis.append('text')
+    .attr('class', 'legend')
+    .style('font-size', '12px')
+    .attr('text-anchor', 'middle')
+    .attr('dy', '0.35rem')
+    .attr('x', function (d,i) {
+      return rScale(maxValue * cfg.labelFactor) * Math.cos(angleSlice * i - Math.PI / 2);
+    })
+    .attr('y', function (d,i) {
+      return rScale(maxValue * cfg.labelFactor) * Math.sin(angleSlice * i - Math.PI / 2);
+    })
+    .text(function(d) {
+      return d;
+    })
+    .call(wrap, cfg.wrapWidth);
+
+
+  /////////////////////////////////////////////////////////
+	///////////// Draw the radar chart blobs ////////////////
+  /////////////////////////////////////////////////////////
   
+  // Radial line function
+  var radarLine = d3.lineRadial()
+    .curve(d3.curveBasicClosed)
+    .radius(function(d) {
+      return rScale(d.value);
+    })
+    .angle(function(d, i) {
+      return i * angleSlice;
+    });
+  
+  if (cfg.roundStrokes) {
+    radarLine.curve(d3.curveCardinalClosed);
+  }
+
+  // Create a wrapper for the blobs
+  var blobWrapper = g.selectAll('.radarWrapper')
+    .data(data)
+    .enter()
+    .append('g')
+    .attr('class', 'radarWrapper');
+
+  // Append the backgrounds
+  blobWrapper.append('path')
+    .attr('class', 'radarArea')
+    .attr('d', function(d) {
+      return radarLine(d);
+    })
+    .style('fill', function(d, i) {
+      return cfg.color(i);
+    })
+    .style('fill-opacity', cfg.opacityArea)
+    .on('mouseover', function () {
+      // Dim all blobs
+      d3.selectAll('.radarArea')
+        .transition()
+        .duration(200)
+        .style('fill-opacity', 0.1);
+      
+      // Increase opacity of the hovered over blob
+      d3.select(this)
+        .transition()
+        .duration(200)
+        .style('fill-opacity', 0.7);
+    })
+    .on('mouseout', function() {
+      // Return all blobs to initial opacity
+      d3.selectAll('.radarArea')
+        .transition()
+        .duration(200)
+        .style('fill-opacity', cfg.opacityArea);
+    })
+
+  // Create the outlines
+  blobWrapper.append('path')
+    .attr('class', 'radarStroke')
+    .attr('d', function(d) {
+      return radarLine(d);
+    })
+    .style('stroke-width', cfg.strokeWidth + 'px')
+    .style('stroke', function(d, i) {
+      return cfg.color(i);
+    })
+    .style('fill', 'none')
+    .style('filter', function() {
+      if (cfg.glow) {
+        return 'url(#glow)';
+      }
+    });
+  
+  // Append the circles
+  var dataSetCounter = 0; // Counter to know in which set of data we are
+  blobWrapper.selectAll('.radarCircle')
+    .data(function(d) {
+      return d;
+    })
+    .enter()
+    .append('circle')
+    .attr('class', 'radarCircle')
+    .attr('r', cfg.dotRadius)
+    .attr('cx', function(d, i) {
+      return rScale(d.value) * Math.cos(angleSlice*i - Math.PI/2);
+    })
+    .attr('cy', function(d, i) {
+      return rScale(d.value) * Math.sin(angleSlice*i - Math.PI/2);
+    })
+    .style('fill', function(d, i, j) {
+      var row = 0;
+      if (i === j.length - 1) {
+        row = dataSetCounter;
+        dataSetCounter = dataSetCounter + 1;
+      } else {
+        row = dataSetCounter;
+      }
+      return cfg.color(row);
+    })
+    .style('fill-opacity', 0.8);
+
+
+  /////////////////////////////////////////////////////////
+	//////// Append invisible circles for tooltip ///////////
+  /////////////////////////////////////////////////////////
+  
+  // Wrapper for invisible circles
+  var blobCircleWrapper = g.selectAll('.radarCircleWrapper')
+    .data(data)
+    .enter()
+    .append('g')
+    .attr('class', 'radarCircleWrapper');
+
+  // Set up the tooltip when hovering a circle
+  var tooltip = g.append('text')
+    .attr('class', 'tooltip')
+    .style('opacity', 0);
+
+  // Append a set of invisible circles on top for the tooltip
+  blobCircleWrapper.selectAll('.radarInvisibleCircle')
+    .data(function(d) {
+      return d;
+    })
+    .enter()
+    .append('circle')
+    .attr('class', 'radarInvisibleCircle')
+    .attr('r', cfg.dotRadius * 1.5)
+    .attr('cx', function (d, i) {
+      return rScale(d.value) * Math.cos(angleSlice*i - Math.PI/2);
+    })
+    .attr('cy', function (d, i) {
+      return rScale(d.value) * Math.sin(angleSlice*i - Math.PI/2);
+    })
+    .style('fill', 'none')
+    .style('pointer-events', 'all')
+    .on('mouseover', function(d) {
+      var newX = parseFloat(d3.select(this).attr('cx')) - 10;
+      var newY = parseFloat(d3.select(this).attr('cy')) - 10;
+
+      tooltip.attr('x', newX)
+        .attr('y', newY)
+        .text(format(d.value))
+        .transition()
+        .duration(200)
+        .style('opacity', 1);
+    })
+    .on('mouseout', function() {
+      tooltip.transition()
+        .duration(200)
+        .style('opacity', 0);
+    })
+
+  /////////////////////////////////////////////////////////
+	/////////// Helper Function for svg text wrap ///////////
+  /////////////////////////////////////////////////////////
+  
+  //Taken from http://bl.ocks.org/mbostock/7555321
+	//Wraps SVG text
+  function wrap(text, width) {
+    text.each(function() {
+      var text = d3.select(this);
+      var words = text.text().split(/\s+/).reverse();
+      var word;
+      var line = [];
+      var lineNumber = 0;
+      var lineHeight = 1.4; // in em
+      var x = text.attr('x');
+      var y = text.attr('y');
+      var dy = parseFloat(text.attr('dy'));
+      var tspan = text.text(null)
+        .append('tspan')
+        .attr('x', x)
+        .attr('y', y)
+        .attr('dy', dy + 'em');
+
+      while (word = words.pop()) {
+        line.push(word);
+        tspan.text(line.join(' '));
+        if (tspan.node().getComputedTextLength() > width) {
+          line.pop();
+          tspan.text(line.join(' '));
+          line = [word];
+          tspan = text.append('tspan')
+            .attr('x', x)
+            .attr('y', y)
+            .attr('dy', ++lineNumber * lineHeight + dy + 'em')
+            .text(word);
+        }
+      }
+    });
+  }
 
 }
